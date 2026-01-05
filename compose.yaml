@@ -1,0 +1,91 @@
+version: "3.8"
+
+services:
+  workspace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    tty: true
+    stdin_open: true
+    env_file:
+      - ./app_calendar/.env
+    volumes:
+      - ./app_calendar:/var/www
+    networks:
+      - laravel-dev
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: >
+      bash -c "
+        echo 'Waiting for DB...';
+        until mysqladmin ping -h db -u${DB_USERNAME} -p${DB_PASSWORD} --silent; do
+          sleep 2;
+        done;
+        echo 'DB is up!';
+        composer install --ignore-platform-reqs --no-interaction;
+        php artisan migrate --force;
+        php artisan db:seed --force;
+        php artisan serve --host=0.0.0.0 --port=8000
+      "
+
+  db:
+    image: mariadb:10.6
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: laravel
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: laravel
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d
+    networks:
+      - laravel-dev
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--password=admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  php-fpm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./app_calendar:/var/www
+    ports:
+      - "9000:9000"
+    networks:
+      - laravel-dev
+    depends_on:
+      - db
+
+  redis:
+    image: redis:alpine
+    container_name: laravel-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - laravel-dev
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: laravel-phpmyadmin
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: admin
+    networks:
+      - laravel-dev
+
+volumes:
+  db-data:
+
+networks:
+  laravel-dev:
+    driver: bridge
