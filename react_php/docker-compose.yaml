@@ -1,0 +1,99 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.backend
+    container_name: backend
+    ports:
+      - "3001:3001"
+    env_file: .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USERNAME=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - CHOKIDAR_USEPOLLING=true
+
+    depends_on:
+      mysqldb:
+        condition: service_healthy
+
+    working_dir: /usr/src/api
+    command: npm run start
+    volumes:
+      - ./api:/usr/src/api
+    networks:
+      - react
+
+  mysqldb:
+    image: mysql:8.0.33
+    container_name: mysql
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD}
+
+      - USER_PASSWORD=${USER_PASSWORD}
+      - USER_EMAIL=${USER_EMAIL}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d
+    networks:
+      - react
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    ports:
+      - "8082:80"
+    environment:
+      - PMA_HOST=mysql
+      - PMA_PORT=3306
+      - PMA_USER=root
+      - PMA_PASSWORD=${DB_PASSWORD}
+    depends_on:
+      - mysqldb
+    networks:
+      - react
+
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile.frontend
+    container_name: frontend
+    restart: always
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./front:/usr/src/app
+
+    environment:
+      - VITE_REACT_APP_BACKEND_URL=${VITE_REACT_APP_BACKEND_URL}
+      - CSRF_SECRET=${CSRF_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - SECRET=${SECRET}
+      - HOST=${HOST}
+      - VITE_REACT_APP_BACKEND_URL_BROWSER=${VITE_REACT_APP_BACKEND_URL}
+      - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=development
+    networks:
+      - react
+
+volumes:
+  mysql-data:
+
+networks:
+  react:
+    driver: bridge

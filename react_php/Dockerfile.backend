@@ -1,0 +1,17 @@
+
+# 1. Base image
+FROM node:latest
+
+WORKDIR /usr/src/api
+
+#COPY package.json package-lock.json* ./
+#RUN npm install
+#COPY . .
+
+
+# Run migrations and start the app
+
+
+EXPOSE 3001
+
+CMD ["npm", "run", "dev", "npx prisma migrate deploy && node dist/main.js"] 
